@@ -26,7 +26,7 @@ canvas{display:block; cursor:grab;}
 </head>
 <body>
 <div id="root">
-  <div id="hud"><div class="title" style="color:#ff8a9e;font-weight:700;margin-bottom:4px;">⚔️ Realm of Legends</div><div>Déplacement/Z : <kbd>ZQSD</kbd> / joystick gauche</div><div>Caméra : <kbd>Souris</kbd> / joystick droit</div><div><kbd>1-0</kbd> Biomes</div></div>
+  <div id="hud"><div class="title" style="color:#ff8a9e;font-weight:700;margin-bottom:4px;">⚔️ Realm of Legends</div><div>Déplacement : <kbd>ZQSD</kbd> / joystick gauche</div><div>Caméra : <kbd>Souris</kbd> / joystick droit</div><div><kbd>1-0</kbd> Biomes</div></div>
   <div class="biome-badge" id="biome-badge">🌲 Forêt</div>
   <div id="menu-settings" role="button" aria-label="Paramètres">⚙️ Paramètres</div>
   <div id="joystick-zone-left"><div id="stick-left"></div></div>
@@ -44,10 +44,9 @@ canvas{display:block; cursor:grab;}
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js';
 
 const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
-const dpad = {forward: false, backward: false, left: false, right: false}; // ZQSD / joystick
-const look = {x: 0, y: 0}; // joystick / mouse look
-const pitchObject = new THREE.Object3D();
+const dpad = {forward: false, backward: false, left: false, right: false}; 
 const yawObject = new THREE.Object3D();
+const pitchObject = new THREE.Object3D();
 yawObject.add(pitchObject);
 
 document.addEventListener('keydown', (e) => {
@@ -67,12 +66,10 @@ document.addEventListener('keyup', (e) => {
   if (k === 'd') dpad.right = false;
 });
 
-// Virtual joysticks
 function makeJoystick(zoneId, stickId, onChange){
   const zone = document.getElementById(zoneId);
   const stick = document.getElementById(stickId);
   let dragging = false;
-  let origin = {x:0,y:0};
   const maxR = () => zone.clientWidth * 0.45;
   const apply = (clientX, clientY) => {
     const rect = zone.getBoundingClientRect();
@@ -87,7 +84,7 @@ function makeJoystick(zoneId, stickId, onChange){
     const nx = dx/limit; const ny = dy/limit;
     onChange(nx, ny);
   };
-  const start = (x, y) => { dragging = true; origin = {x,y}; apply(x,y); };
+  const start = (x, y) => { dragging = true; apply(x,y); };
   const move  = (x, y) => { if (dragging) apply(x,y); };
   const end   = () => { dragging = false; stick.style.transform = 'translate(-50%,-50%)'; onChange(0,0); };
 
@@ -99,9 +96,22 @@ function makeJoystick(zoneId, stickId, onChange){
   window.addEventListener('mousemove', (e) => { if (dragging) move(e.clientX, e.clientY); });
   window.addEventListener('mouseup', end);
 }
-let camX=0, camY=0;
-makeJoystick('joystick-zone-left', 'stick-left', (x,y) => { dpad.forward = y < -0.25; dpad.backward = y > 0.25; dpad.left = x < -0.25; dpad.right = x > 0.25; });
-makeJoystick('joystick-zone-right', 'stick-right', (x,y) => { camX = x; camY = y; });
+
+// Joysticks : gauche = déplacement, droite = caméra
+makeJoystick('joystick-zone-left', 'stick-left', (x,y) => {
+  const deadzone = 0.2;
+  dpad.forward = y < -deadzone;
+  dpad.backward = y > deadzone;
+  dpad.left = x < -deadzone;
+  dpad.right = x > deadzone;
+});
+
+const lookInput = {x: 0, y: 0}; // Caméra : valeurs brutes du joystick droit
+makeJoystick('joystick-zone-right', 'stick-right', (x,y) => {
+  const deadzone = 0.15;
+  lookInput.x = (Math.abs(x) > deadzone) ? x : 0;
+  lookInput.y = (Math.abs(y) > deadzone) ? y : 0;
+});
 
 // Settings panel
 const panel = document.getElementById('panel-settings');
@@ -122,68 +132,52 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 scene.add(yawObject);
 document.getElementById('root').appendChild(renderer.domElement);
 
-// Lights
-const light = new THREE.DirectionalLight(+navigator.language
-  && document.getElementById('v-opacity')?.textContent || '70%',
-  parseInt(document.getElementById('r-opacity')?.value || 70,10)/100,
-  parseInt(document.getElementById('r-size')?.value || 100,10)/100,
-  parseFloat((document.getElementById('r-sens')?.value || 100)/100),!!document.getElementById('chk-haptic')?.checked);
-const hemi = new THREE.HemisphereLight(0xb1e1ff,0xb97a20,0.8);
-const amb = new THREE.AmbientLight(0x404040,0.5); //placeholder for world init below
+scene.add(new THREE.DirectionalLight(0xffdfba, 2.6));
+scene.add(new THREE.HemisphereLight(0xb1e1ff,0xb97a20,0.8));
+scene.add(new THREE.AmbientLight(0xcfd8dc, 0.6));
 
-// Ground + voxels
-const world = new THREE.Group();
-const MAX=25000;
-let count=0;
-const voxelGeo=new THREE.BoxGeometry(0.95,0.95,0.95);
+const MAX = 28000;
+let count = 0;
+const voxelGeo = new THREE.BoxGeometry(0.95,0.95,0.95);
 const palette = {forest_top:0x4caf50, forest_side:0x5d4037, sand:0xffd54f, stone:0x9e9e9e, water:0x29b6f6, snow:0xe1f5fe, leaves:0x388e3c, wood:0x5d4037, lava:0xff6e40};
-
-function add(x,y,z,color, {receiveShadow=true, castShadow=true} = {}){
+function add(x,y,z,color){
   if(count>=MAX) return;
   const m = new THREE.Mesh(voxelGeo, new THREE.MeshLambertMaterial({color}));
   m.position.set(x,y,z);
-  m.receiveShadow = receiveShadow;
-  m.castShadow = castShadow;
   world.add(m);
   count++;
 }
+const world = new THREE.Group();
 
-// Generate 16 biomes in voxel patches
-function biomeRect(cx,cz,w,h,top,side,rng){
+function biomeRect(cx,cz,w,h,top,side,density){
   for(let x=cx;x<cx+w;x++) for(let z=cz;z<cz+h;z++){
-    const px=(x*9301+z*49297+100000)%2147483647; const rr=(px&0x7fffffff)/2147483647;
-    let y= (top === palette.water || top === palette.lava) ? 1 : 0;
-    if(rng){ y = 2+Math.floor((((x*7+z*13)%17))/4); } else { const base=4; y=base+Math.floor(Math.sin(x/4)*Math.cos(z/4)*2.5); }
-    for(let yy=0;yy<=y;yy++){
-      let col = (yy===y)? top : (top===palette.sand? side : side);
-      if(yy<2 && (top===palette.water)){ col = palette.water; }
-      add(x,yy,z,col);
+    const base = 4 + Math.floor(Math.sin(x/6)*Math.cos(z/6)*2.5);
+    const hh = base + Math.min(density/30, 6);
+    for(let y=0;y<=hh;y++){
+      const c = (y===hh) ? top : (side || top);
+      add(x,y,z,c);
     }
   }
 }
-
-biomeRect(0,0,10,8,palette.forest_top,palette.forest_side);
-biomeRect(10,0,8,8,palette.sand,palette.stone);
-biomeRect(18,0,10,8,0xe1f5fe,0xcfd8dc);
-biomeRect(0,8,8,8,palette.lava,palette.stone);
-biomeRect(8,8,10,10,0x29b6f6,palette.sand);
-biomeRect(18,8,10,8,palette.leaves,palette.wood);
-biomeRect(0,16,10,10,palette.stone,palette.stone);
-biomeRect(10,16,10,8,0x66bb6a,0x5d4037);
-biomeRect(20,16,8,8,0xffd54f,palette.stone);
+biomeRect(0,0,10,8, palette.forest_top, palette.forest_side, 120);
+biomeRect(10,0,8,8, palette.sand, palette.forest_side, 30);
+biomeRect(18,0,10,8, palette.snow, palette.stone, 80);
+biomeRect(0,8,8,8, palette.lava, palette.stone, 50);
+biomeRect(8,8,10,10, palette.water, palette.sand, 20);
+biomeRect(18,8,10,8, palette.leaves, palette.wood, 160);
+biomeRect(0,16,10,10, palette.stone, palette.stone, 45);
+biomeRect(10,16,10,8, 0x66bb6a, 0x5d4037, 100);
+biomeRect(20,16,8,8, palette.sand, palette.stone, 35);
 
 scene.add(world);
-scene.add(new THREE.DirectionalLight(+0xffffff, 2.6));
-scene.add(new THREE.AmbientLight(0xcfd8dc, 0.6));
 
-// Biomes config
 const BIOMES = [
   {name:"🌲 Forêt", ground:0x5d4037, top:0x4caf50, fog:0x88aa88, sky:0x87ceeb, density:120},
   {name:"🏔️ Montagne", ground:0x808080, top:0xcfd8dc, fog:0xaaaaaa, sky:0xb0c4de, density:80},
   {name:"🏜️ Désert", ground:0xffd54f, top:0xffd54f, fog:0xf5e6c8, sky:0xffd700, density:30},
   {name:"❄️ Toundra", ground:0xe1f5fe, top:0xffffff, fog:0xdddddd, sky:0xadd8e6, density:40},
   {name:"🌋 Volcan", ground:0x4a0e0e, top:0xff6e40, fog:0x6e1400, sky:0x8b0000, density:50},
-  {name:"🌊 Océan", ground:0x0077b6, top:0x29b6f6, fog:0x004e70, sky:0x00b4d8, density:20},
+  {name:"🌊 Océen", ground:0x0077b6, top:0x29b6f6, fog:0x004e70, sky:0x00b4d8, density:20},
   {name:"🌿 Jungle", ground:0x1a5c1a, top:0x2e7d32, fog:0x2d5a27, sky:0x4a7c59, density:160},
   {name:"💎 Crystal", ground:0x130022, top:0x8e24aa, fog:0x5c1568, sky:0xd2b4de, density:60},
   {name:"🍄 Champi", ground:0x3a002e, top:0x9932cc, fog:0x5a1d5a, sky:0xda70d6, density:70},
@@ -202,7 +196,6 @@ function setBiome(i){ currentBiome = ((i % BIOMES.length) + BIOMES.length) % BIO
 function tpBiome(i){ setBiome(i); yawObject.position.set(i*12, 2.5, 0); camera.position.copy(yawObject.position); }
 setBiome(0); tpBiome(0);
 
-// Physics / controls style
 const speed = 6;
 const lookSens = () => parseFloat((document.getElementById('r-sens')?.value || 100)/100);
 yawObject.position.set(0,2.5,0);
@@ -211,20 +204,18 @@ pitchObject.rotation.order = 'YXZ';
 pitchObject.rotation.y = 0; pitchObject.rotation.x = 0;
 
 // Mouse look on desktop
-let pointerLocked = false, lastMX=0, lastMY=0;
 renderer.domElement.addEventListener('click', () => { if (!isTouch) renderer.domElement.requestPointerLock?.(); });
-document.addEventListener('pointerlockchange', () => { pointerLocked = document.pointerLockElement === renderer.domElement; });
+document.addEventListener('pointerlockchange', () => pointerLocked = document.pointerLockElement === renderer.domElement);
 document.addEventListener('mousemove', (e) => {
   if (!pointerLocked || isTouch) return;
-  camX += (e.movementX || 0) * 0.004 * lookSens();
-  camY += (e.movementY || 0) * 0.004 * lookSens();
-  camY = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, camY));
+  const sens = lookSens();
+  yawObject.rotation.y -= (e.movementX || 0) * 0.002 * sens;
+  pitchObject.rotation.x -= (e.movementY || 0) * 0.002 * sens;
+  pitchObject.rotation.x = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, pitchObject.rotation.x));
 });
 
-// Haptics
 function hapticIfAllowed(ms=8){ try { if (document.getElementById('chk-haptic')?.checked && navigator.vibrate) navigator.vibrate(ms); } catch(e){} }
 
-// Game loop
 const clock = new THREE.Clock();
 function animate(){
   requestAnimationFrame(animate);
@@ -236,16 +227,19 @@ function animate(){
   yawObject.position.addScaledVector(moveDir, speed * dt);
   yawObject.position.y = Math.max(0.6, yawObject.position.y);
 
-  yawObject.rotation.y -= camX * 2;
-  pitchObject.rotation.x -= camY * 2;
-  camX *= 0.9; camY *= 0.9;
+  // Caméra : joystick droit -> rotation directe, sensible par défaut à 0.5
+  const sens = lookSens() * 0.5;
+  yawObject.rotation.y -= lookInput.x * sens * 2.5;
+  pitchObject.rotation.x -= lookInput.y * sens * 2.5;
+  pitchObject.rotation.x = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, pitchObject.rotation.x));
+
   camera.position.copy(yawObject.position);
   camera.quaternion.copy(pitchObject.quaternion).multiply(yawObject.quaternion);
   renderer.render(scene, camera);
 }
 animate();
 
-// Settings listeners
+// Settings
 const rOpacity = document.getElementById('r-opacity');
 const rSize = document.getElementById('r-size');
 const rSens = document.getElementById('r-sens');
@@ -257,15 +251,14 @@ rSize?.addEventListener('input', () => { vSize.textContent = rSize.value+'%'; co
 rSens?.addEventListener('input', () => { vSens.textContent = (parseInt(rSens.value,10)/100).toFixed(2); });
 rOpacity?.dispatchEvent(new Event('input'));
 
-// Numbers biomes
 window.addEventListener('keydown', (e) => {
   if (e.key >= '1' && e.key <= '9') tpBiome(parseInt(e.key,10)-1);
   if (e.key === '0') tpBiome(9);
 });
 
-// Touch fallback gesture for camera when no joystick activated
+// Touch fallback
 renderer.domElement.addEventListener('touchmove', (e) => {
-  if (e.touches.length === 2){ const dx = (e.touches[0].clientX - e.touches[1].clientX) * 0.005; const dy = (e.touches[0].clientY - e.touches[1].clientY) * 0.005; camX += dx; camY += dy; camY = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, camY)); e.preventDefault(); } }, {passive:false});
+  if (e.touches.length === 2){ const dx = (e.touches[0].clientX - e.touches[1].clientX) * 0.003; const dy = (e.touches[0].clientY - e.touches[1].clientY) * 0.003; yawObject.rotation.y -= dx; pitchObject.rotation.x -= dy; pitchObject.rotation.x = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, pitchObject.rotation.x)); e.preventDefault(); } }, {passive:false});
 </script>
 </body>
 </html>
