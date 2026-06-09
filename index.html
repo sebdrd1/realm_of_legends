@@ -101,8 +101,8 @@ function makeJoystick(zoneId, stickId, onChange){
 // Joysticks : gauche = déplacement, droite = caméra
 makeJoystick('joystick-zone-left', 'stick-left', (x,y) => {
   const deadzone = 0.35;
-  dpad.forward = y < -deadzone;
-  dpad.backward = y > deadzone;
+  dpad.forward = y > deadzone;
+  dpad.backward = y < -deadzone;
   dpad.left = x < -deadzone;
   dpad.right = x > deadzone;
 });
