@@ -45,6 +45,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
 const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
 const dpad = {forward: false, backward: false, left: false, right: false}; 
+const camDir = {left: false, right: false, up: false, down: false}; 
 const yawObject = new THREE.Object3D();
 const pitchObject = new THREE.Object3D();
 yawObject.add(pitchObject);
@@ -106,11 +107,13 @@ makeJoystick('joystick-zone-left', 'stick-left', (x,y) => {
   dpad.right = x > deadzone;
 });
 
-const lookInput = {x: 0, y: 0}; // Caméra : valeurs brutes du joystick droit
+// Joystick droit : même logique que gauche (digital), évite l'effet "trop sensible"
+const deadzone = 0.2;
 makeJoystick('joystick-zone-right', 'stick-right', (x,y) => {
-  const deadzone = 0.15;
-  lookInput.x = (Math.abs(x) > deadzone) ? x : 0;
-  lookInput.y = (Math.abs(y) > deadzone) ? y : 0;
+  camDir.left = x < -deadzone;
+  camDir.right = x > deadzone;
+  camDir.up = y < -deadzone;    // stick vers le haut = regarder vers le haut
+  camDir.down = y > deadzone;   // stick vers le bas = regarder vers le bas
 });
 
 // Settings panel
@@ -177,7 +180,7 @@ const BIOMES = [
   {name:"🏜️ Désert", ground:0xffd54f, top:0xffd54f, fog:0xf5e6c8, sky:0xffd700, density:30},
   {name:"❄️ Toundra", ground:0xe1f5fe, top:0xffffff, fog:0xdddddd, sky:0xadd8e6, density:40},
   {name:"🌋 Volcan", ground:0x4a0e0e, top:0xff6e40, fog:0x6e1400, sky:0x8b0000, density:50},
-  {name:"🌊 Océen", ground:0x0077b6, top:0x29b6f6, fog:0x004e70, sky:0x00b4d8, density:20},
+  {name:"🌊 Océan", ground:0x0077b6, top:0x29b6f6, fog:0x004e70, sky:0x00b4d8, density:20},
   {name:"🌿 Jungle", ground:0x1a5c1a, top:0x2e7d32, fog:0x2d5a27, sky:0x4a7c59, density:160},
   {name:"💎 Crystal", ground:0x130022, top:0x8e24aa, fog:0x5c1568, sky:0xd2b4de, density:60},
   {name:"🍄 Champi", ground:0x3a002e, top:0x9932cc, fog:0x5a1d5a, sky:0xda70d6, density:70},
@@ -227,10 +230,12 @@ function animate(){
   yawObject.position.addScaledVector(moveDir, speed * dt);
   yawObject.position.y = Math.max(0.6, yawObject.position.y);
 
-  // Caméra : joystick droit -> rotation directe, sensible par défaut à 0.5
-  const sens = lookSens() * 0.5;
-  yawObject.rotation.y -= lookInput.x * sens * 2.5;
-  pitchObject.rotation.x -= lookInput.y * sens * 2.5;
+  // Caméra : même principe que déplacement — stick directionnel à vitesse fixe
+  const rotSpeed = 2.2 * lookSens() * dt;
+  if (camDir.left) yawObject.rotation.y += rotSpeed;
+  if (camDir.right) yawObject.rotation.y -= rotSpeed;
+  if (camDir.up) pitchObject.rotation.x -= rotSpeed;
+  if (camDir.down) pitchObject.rotation.x += rotSpeed;
   pitchObject.rotation.x = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, pitchObject.rotation.x));
 
   camera.position.copy(yawObject.position);
