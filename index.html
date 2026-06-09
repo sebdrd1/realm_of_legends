@@ -100,7 +100,7 @@ function makeJoystick(zoneId, stickId, onChange){
 
 // Joysticks : gauche = déplacement, droite = caméra
 makeJoystick('joystick-zone-left', 'stick-left', (x,y) => {
-  const deadzone = 0.2;
+  const deadzone = 0.35;
   dpad.forward = y < -deadzone;
   dpad.backward = y > deadzone;
   dpad.left = x < -deadzone;
@@ -108,7 +108,7 @@ makeJoystick('joystick-zone-left', 'stick-left', (x,y) => {
 });
 
 // Joystick droit : même logique que gauche (digital), évite l'effet "trop sensible"
-const deadzone = 0.2;
+const deadzone = 0.35;
 makeJoystick('joystick-zone-right', 'stick-right', (x,y) => {
   camDir.left = x < -deadzone;
   camDir.right = x > deadzone;
@@ -231,7 +231,7 @@ function animate(){
   yawObject.position.y = Math.max(0.6, yawObject.position.y);
 
   // Caméra : même principe que déplacement — stick directionnel à vitesse fixe
-  const rotSpeed = 2.2 * lookSens() * dt;
+  const rotSpeed = 0.4 * lookSens() * dt;
   if (camDir.left) yawObject.rotation.y += rotSpeed;
   if (camDir.right) yawObject.rotation.y -= rotSpeed;
   if (camDir.up) pitchObject.rotation.x -= rotSpeed;
