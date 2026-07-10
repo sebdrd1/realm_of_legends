@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Realm of Legends — Voxel Biome Explorer</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#000;color:#eee;font-family:'Segoe UI',sans-serif;overflow:hidden;touch-action:none}
+canvas{display:block;position:fixed;top:0;left:0;z-index:1}
+/* Loading */
+#loading{position:fixed;inset:0;background:linear-gradient(135deg,#0a0a1a,#1a0a2e);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;transition:opacity .6s}
+#loading.done{opacity:0;pointer-events:none}
+#loading h1{font-size:2em;background:linear-gradient(135deg,#e94560,#feca57);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px}
+#loading p{color:#888;margin-bottom:14px;font-size:12px}
+#loading .bar{width:220px;height:3px;background:#222;border-radius:2px;overflow:hidden}
+#loading .bar .fill{height:100%;width:0%;background:linear-gradient(90deg,#e94560,#feca57);border-radius:2px;transition:width .3s}
+#load-status{color:#555;font-size:10px;margin-top:6px}
+/* HUD */
+#hud{position:fixed;top:6px;left:6px;background:rgba(0,0,0,.55);padding:6px 10px;border-radius:6px;font-size:10px;line-height:1.5;pointer-events:none;z-index:20;backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.06);display:none}
+#hud .title{color:#e94560;font-weight:700;font-size:12px;margin-bottom:1px}
+#hud kbd{background:rgba(255,255,255,.08);padding:1px 3px;border-radius:2px;font-size:8px}
+#coords{color:#555;margin-top:1px;font-size:9px}
+#biome-tag{position:fixed;top:6px;right:6px;background:rgba(0,0,0,.55);padding:5px 10px;border-radius:6px;font-size:12px;color:#feca57;z-index:20;backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.06);display:none;font-weight:600}
+#crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:12px;height:12px;pointer-events:none;z-index:15;display:none}
+#crosshair::before,#crosshair::after{content:'';position:absolute;background:rgba(255,255,255,.3)}
+#crosshair::before{width:1px;height:100%;left:50%}
+#crosshair::after{width:100%;height:1px;top:50%}
+#tip{position:fixed;bottom:52px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.5);padding:3px 8px;border-radius:4px;font-size:9px;color:#666;z-index:20;display:none;pointer-events:none}
+/* Menu bar */
+#menu{position:fixed;bottom:4px;left:50%;transform:translateX(-50%);display:none;gap:2px;z-index:20;flex-wrap:wrap;justify-content:center;max-width:96vw;padding:3px 6px;background:rgba(0,0,0,.6);border-radius:8px;backdrop-filter:blur(4px);border:1px solid rgba(255,255,255,.06)}
+#menu button{background:rgba(255,255,255,.06);color:#bbb;border:none;padding:3px 6px;border-radius:4px;cursor:pointer;font-size:9px;transition:all .15s}
+#menu button.sel{background:#e94560;color:#fff}
+#menu button.action{background:rgba(233,69,96,.2);color:#e94560;font-weight:600}
+/* Settings panel */
+#settings{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;align-items:center;justify-content:center;z-index:50;backdrop-filter:blur(8px)}
+#settings .panel{background:linear-gradient(135deg,#111122,#1a1030);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:18px 22px;min-width:260px;max-width:90vw}
+#settings h2{color:#e94560;font-size:1.1em;margin-bottom:10px;text-align:center}
+#settings .row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;font-size:11px}
+#settings .row label{color:#888}
+#settings .row input[type=range]{width:100px;accent-color:#e94560}
+#settings .row .val{color:#feca57;min-width:28px;text-align:right;font-weight:700}
+#settings .btn{display:block;margin:10px auto 0;background:#e94560;color:#fff;border:none;padding:6px 18px;border-radius:5px;cursor:pointer;font-size:12px}
+#settings .keys{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06)}
+#settings .keys h3{color:#555;font-size:9px;margin-bottom:4px}
+#settings .keys div{font-size:8px;color:#444;line-height:1.5}
+#settings .keys kbd{background:rgba(255,255,255,.06);padding:1px 3px;border-radius:2px;font-size:8px;color:#777}
+/* Inventory panel */
+#inventory{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:50;backdrop-filter:blur(8px)}
+#inv-panel{background:linear-gradient(135deg,#111122,#1a1030);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px 20px;min-width:300px;max-width:92vw;max-height:80vh;overflow-y:auto}
+#inv-panel h2{color:#feca57;font-size:1.1em;margin-bottom:10px;text-align:center}
+#inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(52px,1fr));gap:6px;margin-bottom:10px}
+.inv-slot{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:6px;padding:4px;text-align:center;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.inv-slot .icon{font-size:20px}
+.inv-slot .label{font-size:7px;color:#888;margin-top:2px}
+.inv-slot .count{font-size:8px;color:#feca57;font-weight:700}
+.inv-slot.empty{opacity:.3}
+#inv-close{display:block;margin:0 auto;background:#e94560;color:#fff;border:none;padding:6px 18px;border-radius:5px;cursor:pointer;font-size:12px}
+/* Touch controls */
+#touch-ctrl{position:fixed;inset:0;z-index:25;display:none;pointer-events:none}
+.joy-base{position:absolute;width:100px;height:100px;background:rgba(255,255,255,.04);border-radius:50%;border:2px solid rgba(255,255,255,.08);pointer-events:auto;touch-action:none}
+.joy-knob{position:absolute;width:38px;height:38px;border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+#joy-move{left:16px;bottom:85px}
+#joy-move .joy-knob{background:rgba(233,69,96,.4);border:2px solid rgba(233,69,96,.55)}
+#joy-look{right:16px;bottom:85px}
+#joy-look .joy-knob{background:rgba(52,152,219,.4);border:2px solid rgba(52,152,219,.55)}
+.joy-label{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:8px;color:rgba(255,255,255,.2);white-space:nowrap}
+#touch-btns{position:absolute;right:16px;bottom:195px;display:flex;flex-direction:column;gap:5px;pointer-events:auto}
+.tbtn{width:42px;height:42px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#ccc;font-size:15px;display:flex;align-items:center;justify-content:center;user-select:none;-webkit-user-select:none;touch-action:manipulation}
+.tbtn.touching{background:rgba(233,69,96,.4)!important}
+.tab-btn{background:rgba(255,255,255,.06);color:#888;border:none;padding:4px 10px;border-radius:5px;cursor:pointer;font-size:10px;transition:all .15s}
+.tab-btn.sel{background:#e94560;color:#fff}
+@media(min-width:768px){#touch-ctrl{display:none!important}}
+</style>
+</head>
+<body>
+<div id="loading">
+<h1>⚔️ Realm of Legends</h1>
+<p>Voxel Biome Explorer</p>
+<div class="bar"><div class="fill" id="lf"></div></div>
+<div id="ls">Initialisation...</div>
+</div>
+<div id="hud"><div class="title">⚔️ Realm of Legends</div><div><kbd>WASD</kbd> Bouger</div><div><kbd>Espace</kbd> Monter <kbd>Shift</kbd> Descendre</div><div><kbd>Souris</kbd> Regarder</div><div id="coords">X:0 Y:0 Z:0</div></div>
+<div id="biome-tag">🌲 Forêt</div>
+<div id="crosshair"></div>
+<div id="tip">Cliquez pour capturer la souris</div>
+<div id="menu"></div>
+<!-- Settings -->
+<div id="settings">
+<div class="panel" id="settings-panel">
+<h2>⚙️ Paramètres</h2>
+<!-- Tabs -->
+<div style="display:flex;gap:4px;margin-bottom:12px;justify-content:center">
+<button class="tab-btn sel" id="tab-game" onclick="switchTab('game')">🎮 Jeu</button>
+<button class="tab-btn" id="tab-audio" onclick="switchTab('audio')">🔊 Audio</button>
+<button class="tab-btn" id="tab-keys" onclick="switchTab('keys')">⌨️ Raccourcis</button>
+</div>
+<!-- Gameplay tab -->
+<div id="tab-game-content">
+<div class="row"><label>Vitesse</label><input type="range" id="sSpd" min="10" max="120" value="50"><span class="val" id="sSpdV">50</span></div>
+<div class="row"><label>Sensibilité</label><input type="range" id="sSens" min="1" max="10" value="3"><span class="val" id="sSensV">3</span></div>
+<div class="row"><label>Vitesse tactile</label><input type="range" id="sTouch" min="10" max="100" value="40"><span class="val" id="sTouchV">40</span></div>
+<div class="row"><label>Sensibilité tactile</label><input type="range" id="sTouchSens" min="1" max="10" value="3"><span class="val" id="sTouchSensV">3</span></div>
+<div class="row"><label>Distance</label><input type="range" id="sFog" min="20" max="200" value="100"><span class="val" id="sFogV">100</span></div>
+<div class="row"><label>Hauteur max</label><input type="range" id="sH" min="2" max="20" value="8"><span class="val" id="sHV">8</span></div>
+</div>
+<!-- Audio tab -->
+<div id="tab-audio-content" style="display:none">
+<div class="row"><label>🔊 Volume général</label><input type="range" id="sVol" min="0" max="100" value="70"><span class="val" id="sVolV">70%</span></div>
+<div class="row"><label>🎵 Musique de fond</label><input type="range" id="sMus" min="0" max="100" value="50"><span class="val" id="sMusV">50%</span></div>
+<div class="row"><label>💥 Effets sonores</label><input type="range" id="sSfx" min="0" max="100" value="80"><span class="val" id="sSfxV">80%</span></div>
+<div class="row"><label>💬 Dialogues</label><input type="range" id="sDlg" min="0" max="100" value="90"><span class="val" id="sDlgV">90%</span></div>
+<div class="row"><label>🌿 Ambiance</label><input type="range" id="sAmb" min="0" max="100" value="60"><span class="val" id="sAmbV">60%</span></div>
+<div style="margin-top:8px;text-align:center">
+<button class="btn" id="btn-test-sfx" style="background:#333;padding:5px 14px;font-size:11px;margin:2px">🔊 Test SFX</button>
+<button class="btn" id="btn-test-mus" style="background:#333;padding:5px 14px;font-size:11px;margin:2px">🎵 Test Musique</button>
+<button class="btn" id="btn-test-dlg" style="background:#333;padding:5px 14px;font-size:11px;margin:2px">💬 Test Dialogue</button>
+</div>
+<div id="audio-status" style="text-align:center;font-size:9px;color:#555;margin-top:6px">Audio prêt</div>
+</div>
+<!-- Keys tab -->
+<div id="tab-keys-content" style="display:none">
+<div class="keys"><h3>⌨️ Clavier</h3>
+<div><kbd>WASD</kbd> Déplacement</div>
+<div><kbd>Espace</kbd> Monter · <kbd>Shift</kbd> Descendre</div>
+<div><kbd>Souris</kbd> Regarder</div>
+<div><kbd>1-9</kbd> Biomes 1-9 · <kbd>Numpad</kbd> Biomes 10-16</div>
+<div><kbd>ESC</kbd> Paramètres / Libérer souris</div></div>
+<div class="keys" style="margin-top:8px"><h3>📱 Tactile</h3>
+<div>Joystick gauche : se déplacer</div>
+<div>Joystick droit : regarder</div>
+<div>⬆️⬇️ Boutons : monter / descendre</div></div>
+</div>
+<button class="btn" id="sClose">✕ Fermer</button>
+</div>
+</div>
+<!-- Inventory -->
+<div id="inventory">
+<div id="inv-panel">
+<h2>🎒 Inventaire</h2>
+<div id="inv-grid"></div>
+<button id="inv-close">✕ Fermer</button>
+</div>
+</div>
+<!-- Touch controls -->
+<div id="touch-ctrl">
+<div id="joy-move" class="joy-base"><div class="joy-knob"></div><div class="joy-label">Déplacement</div></div>
+<div id="joy-look" class="joy-base"><div class="joy-knob"></div><div class="joy-label">Regarder</div></div>
+<div id="touch-btns">
+<div class="tbtn" id="btn-up">⬆</div>
+<div class="tbtn" id="btn-down">⬇</div>
+</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+// ============ SETUP ============
+var LD=document.getElementById('loading'),LF=document.getElementById('lf'),LS=document.getElementById('ls');
+function loadPct(p,t){LF.style.width=p+'%';if(t)LS.textContent=t}
+var scene=new THREE.Scene();
+var camera=new THREE.PerspectiveCamera(70,window.innerWidth/window.innerHeight,.1,500);
+var renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+document.body.appendChild(renderer.domElement);
+loadPct(8,'Chargement...');
+
+// ============ GRID CHUNKS (Minecraft-style) ============
+// Grille dynamique: génère des chunks autour du joueur
+var CHUNK_SIZE=80;    // taille d'un chunk = 80 unités
+var GRID_STEP=8;      // ligne tous les 8 unités dans chaque chunk
+var VIEW_DIST=5;      // nombre de chunks visibles dans chaque direction
+var gridChunks={};     // map clé "cx,cz" → LineSegments
+var gMat=new THREE.LineBasicMaterial({color:0x2a2a3a,transparent:true,opacity:.12});
+
+function getChunkKey(cx,cz){return cx+','+cz}
+
+function createChunk(cx,cz){
+  var key=getChunkKey(cx,cz);
+  if(gridChunks[key])return;
+  var ox=cx*CHUNK_SIZE, oz=cz*CHUNK_SIZE;
+  var lines=[];
+  var step=GRID_STEP;
+  for(var x=ox;x<=ox+CHUNK_SIZE;x+=step){
+    lines.push(x,0,oz,x,0,oz+CHUNK_SIZE);
+  }
+  for(var z=oz;z<=oz+CHUNK_SIZE;z+=step){
+    lines.push(ox,0,z,ox+CHUNK_SIZE,0,z);
+  }
+  var geom=new THREE.BufferGeometry();
+  geom.setAttribute('position',new THREE.BufferAttribute(new Float32Array(lines),3));
+  var mesh=new THREE.LineSegments(geom,gMat);
+  scene.add(mesh);
+  gridChunks[key]={mesh:mesh,ox:ox,oz:oz};
+}
+
+function updateGridChunks(px,pz){
+  var ccx=Math.floor(px/CHUNK_SIZE);
+  var ccz=Math.floor(pz/CHUNK_SIZE);
+  // Créer les chunks dans le rayon de vision
+  for(var dx=-VIEW_DIST;dx<=VIEW_DIST;dx++){
+    for(var dz=-VIEW_DIST;dz<=VIEW_DIST;dz++){
+      createChunk(ccx+dx,ccz+dz);
+    }
+  }
+  // Supprimer les chunks trop loin (optionnel, pour perf)
+  var keysToRemove=[];
+  for(var key in gridChunks){
+    var parts=key.split(',');
+    var cx=+parts[0],cz=+parts[1];
+    if(Math.abs(cx-ccx)>VIEW_DIST*2||Math.abs(cz-ccz)>VIEW_DIST*2){
+      keysToRemove.push(key);
+    }
+  }
+  keysToRemove.forEach(function(key){
+    var c=gridChunks[key];
+    if(c&&c.mesh){
+      scene.remove(c.mesh);
+      if(c.mesh.geometry)c.mesh.geometry.dispose();
+    }
+    delete gridChunks[key];
+  });
+}
+
+// Axe Z principal (bleu)
+scene.add(new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,-1e7),new THREE.Vector3(0,0,1e7)]),
+  new THREE.LineBasicMaterial({color:0x3344aa,transparent:true,opacity:.3})
+));
+// Axe X principal (rouge)
+scene.add(new THREE.Line(
+  new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-1e7,0,0),new THREE.Vector3(1e7,0,0)]),
+  new THREE.LineBasicMaterial({color:0xaa3333,transparent:true,opacity:.3})
+));
+
+// ============ BIOMES ============
+var BIOMES=[
+{n:'🌲 Forêt',top:0x4a8c3f,dt:0x6b4226,sky:0x87ceeb,fog:0x88aa88,d:.12,h:4,t:0x2d6b1e,tr:0x6b4226,sn:false},
+{n:'🏔️ Montagne',top:0xe8e8e8,dt:0x808080,sky:0xb0c4de,fog:0xbbbbbb,d:.04,h:10,t:0x556b2f,tr:0x654321,sn:false},
+{n:'🏜️ Désert',top:0xf0d890,dt:0xd4a574,sky:0xffd700,fog:0xd4a574,d:.01,h:2,t:0xdaa520,tr:0x8b7355,sn:false},
+{n:'❄️ Toundra',top:0xffffff,dt:0xe0e0e0,sky:0xadd8e6,fog:0xdddddd,d:.02,h:2,t:0x2f4f4f,tr:0x4a4a4a,sn:true},
+{n:'🌋 Volcan',top:0x3d0c02,dt:0x4a0e0e,sky:0x8b0000,fog:0x4a0e0e,d:.03,h:5,t:0x8b0000,tr:0x2d0000,sn:false},
+{n:'🌊 Océan',top:0x0096c7,dt:0x0077b6,sky:0x00b4d8,fog:0x0077b6,d:0,h:1,t:0x20b2aa,tr:0x008080,sn:false},
+{n:'🌿 Jungle',top:0x2d7a2d,dt:0x1a5c1a,sky:0x4a7c59,fog:0x2d5a27,d:.18,h:5,t:0x006400,tr:0x5c4033,sn:false},
+{n:'💎 Crystal',top:0x9b59b6,dt:0x8e44ad,sky:0xd2b4de,fog:0x9b59b6,d:.05,h:3,t:0xe74c3c,tr:0x6c3483,sn:false},
+{n:'🍄 Champignon',top:0x8b008b,dt:0x9932cc,sky:0xda70d6,fog:0x9932cc,d:.07,h:3,t:0xff6347,tr:0x8b008b,sn:false},
+{n:'🌾 Plaine',top:0x7cba3d,dt:0x8bc34a,sky:0x87ceeb,fog:0xa8d8a8,d:.03,h:2,t:0x6b8e23,tr:0x8b7355,sn:false},
+{n:'🏛️ Ruines',top:0x8b8682,dt:0xa8a39d,sky:0xc0b283,fog:0x8b8682,d:.02,h:3,t:0x696969,tr:0x4a4a4a,sn:false},
+{n:'🌙 Sombre',top:0x1a1a2e,dt:0x16213e,sky:0x0f3460,fog:0x1a1a2e,d:.08,h:3,t:0x2c003e,tr:0x1a001a,sn:false},
+{n:'🔥 Lave',top:0xff4500,dt:0xff6347,sky:0xff8c00,fog:0xff4500,d:.01,h:2,t:0xff0000,tr:0x8b0000,sn:false},
+{n:'☁️ Ciel',top:0xf0f8ff,dt:0xe6f3ff,sky:0x87ceeb,fog:0xe6f3ff,d:.01,h:2,t:0xffffff,tr:0xdddddd,sn:false},
+{n:'🌺 Floral',top:0xff69b4,dt:0xffb6c1,sky:0xffe4e1,fog:0xffb6c1,d:.1,h:2,t:0xff1493,tr:0xc71585,sn:false},
+{n:'⚡ Tempête',top:0x2c3e50,dt:0x34495e,sky:0x1a1a2e,fog:0x2c3e50,d:.03,h:3,t:0x1abc9c,tr:0x16a085,sn:false}
+];
+
+var MAX_V=50000, vMesh=null, ground=null, biomeIndex=0, maxH=8;
+var dummy=new THREE.Object3D(), col=new THREE.Color();
+
+function buildWorld(biomeIdx){
+  var b=BIOMES[biomeIdx];
+  scene.background=new THREE.Color(b.sky);
+  scene.fog=new THREE.FogExp2(b.fog,.008);
+  scene.children.filter(function(c){return c.isLight}).forEach(function(c){scene.remove(c)});
+  scene.add(new THREE.AmbientLight(0xffffff,.55));
+  var sun=new THREE.DirectionalLight(0xffffff,.85);
+  sun.position.set(40,60,25);
+  scene.add(sun);
+  if(vMesh){scene.remove(vMesh);vMesh.geometry.dispose();vMesh.material.dispose()}
+  if(ground){scene.remove(ground);ground.geometry.dispose();ground.material.dispose()}
+  var gG=new THREE.PlaneGeometry(200,200);
+  var gM=new THREE.MeshLambertMaterial({color:b.top});
+  ground=new THREE.Mesh(gG,gM);
+  ground.rotation.x=-Math.PI/2;
+  ground.position.y=-.5;
+  scene.add(ground);
+  vMesh=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),new THREE.MeshLambertMaterial(),MAX_V);
+  vMesh.count=0;
+  var cnt=0, R=38;
+  for(var x=-R;x<R;x++){
+    for(var z=-R;z<R;z++){
+      var h=Math.floor(Math.sin(x*.07)*2.5+Math.cos(z*.1)*2+Math.sin((x+z)*.04)*3.5);
+      h=Math.max(0,h+b.h);
+      if(biomeIdx===1)h+=Math.floor(Math.abs(x)*.1+Math.abs(z)*.07);
+      if(biomeIdx===5)h=Math.min(h,1);
+      h=Math.min(h,maxH);
+      for(var y=0;y<=h;y++){
+        if(cnt>=MAX_V)break;
+        dummy.position.set(x+.5,y,z+.5);
+        dummy.updateMatrix();
+        vMesh.setMatrixAt(cnt,dummy.matrix);
+        if(y===h)vMesh.setColorAt(cnt,col.setHex(b.top));
+        else if(y<h*.35)vMesh.setColorAt(cnt,col.setHex(0x6b5b4f));
+        else vMesh.setColorAt(cnt,col.setHex(b.dt));
+        cnt++;
+      }
+      if(cnt<MAX_V&&Math.random()<b.d&&h>=2){
+        var tH=3+Math.floor(Math.random()*3);
+        for(var ty=0;ty<tH&&cnt<MAX_V;ty++){
+          dummy.position.set(x+.5,h+1+ty,z+.5);
+          dummy.updateMatrix();
+          vMesh.setMatrixAt(cnt,dummy.matrix);
+          vMesh.setColorAt(cnt,col.setHex(ty<tH-1?b.tr:b.t));
+          cnt++;
+        }
+        for(var lx=-1;lx<=1;lx++)for(var lz=-1;lz<=1;lz++){
+          if(cnt>=MAX_V)break;
+          if(!lx&&!lz)continue;
+          dummy.position.set(x+.5+lx,h+tH,z+.5+lz);
+          dummy.updateMatrix();
+          vMesh.setMatrixAt(cnt,dummy.matrix);
+          vMesh.setColorAt(cnt,col.setHex(b.t));
+          cnt++;
+        }
+      }
+      if(b.sn&&h>=4&&cnt<MAX_V){
+        dummy.position.set(x+.5,h+1,z+.5);
+        dummy.updateMatrix();
+        vMesh.setMatrixAt(cnt,dummy.matrix);
+        vMesh.setColorAt(cnt,col.setHex(0xffffff));
+        cnt++;
+      }
+      if(biomeIdx===7&&Math.random()<.025&&cnt<MAX_V){
+        var cH=2+Math.floor(Math.random()*3);
+        var cCol=[0xe74c3c,0x3498db,0x2ecc71,0xf39c12,0x9b59b6];
+        for(var cy=0;cy<cH&&cnt<MAX_V;cy++){
+          dummy.position.set(x+.5,h+1+cy,z+.5);
+          dummy.updateMatrix();
+          vMesh.setMatrixAt(cnt,dummy.matrix);
+          vMesh.setColorAt(cnt,col.setHex(cCol[cy%5]));
+          cnt++;
+        }
+      }
+      if(biomeIdx===11&&Math.random()<.012&&cnt<MAX_V){
+        dummy.position.set(x+.5,0,z+.5);
+        dummy.updateMatrix();
+        vMesh.setMatrixAt(cnt,dummy.matrix);
+        vMesh.setColorAt(cnt,col.setHex(0xff4500));
+        cnt++;
+      }
+      if(biomeIdx===8&&Math.random()<.04&&cnt<MAX_V){
+        var mH=1+Math.floor(Math.random()*2);
+        for(var my=0;my<mH&&cnt<MAX_V;my++){
+          dummy.position.set(x+.5,h+1+my,z+.5);
+          dummy.updateMatrix();
+          vMesh.setMatrixAt(cnt,dummy.matrix);
+          vMesh.setColorAt(cnt,col.setHex(my<mH?0xffffff:0xff6347));
+          cnt++;
+        }
+      }
+    }
+  }
+  vMesh.count=cnt;
+  vMesh.instanceMatrix.needsUpdate=true;
+  if(vMesh.instanceColor)vMesh.instanceColor.needsUpdate=true;
+  scene.add(vMesh);
+  camera.position.set(0,12,25);
+  camera.lookAt(0,0,0);
+}
+
+function switchBiome(i){
+  biomeIndex=i;
+  buildWorld(i);
+  document.getElementById('biome-tag').textContent=BIOMES[i].n;
+  var btns=document.querySelectorAll('#menu button.biome');
+  btns.forEach(function(b,idx){b.classList.toggle('sel',idx===i)});
+}
+
+loadPct(20,'Génération du monde...');
+buildWorld(0);
+
+// ============ MENU ============
+var menu=document.getElementById('menu');
+BIOMES.forEach(function(b,i){
+  var btn=document.createElement('button');
+  btn.textContent=b.n;
+  btn.className='biome';
+  btn.onclick=function(){switchBiome(i)};
+  if(i===0)btn.classList.add('sel');
+  menu.appendChild(btn);
+});
+// Action buttons
+var btnSettings=document.createElement('button');
+btnSettings.textContent='⚙️';
+btnSettings.className='action';
+btnSettings.onclick=function(){settingsOpen=true;document.getElementById('settings').style.display='flex'};
+menu.appendChild(btnSettings);
+
+var btnInv=document.createElement('button');
+btnInv.textContent='🎒';
+btnInv.className='action';
+btnInv.onclick=function(){document.getElementById('inventory').style.display='flex'};
+menu.appendChild(btnInv);
+
+// ============ INVENTORY ============
+var INV_ITEMS=[
+{icon:'🗡️',name:'Épée',count:1},
+{icon:'🛡️',name:'Bouclier',count:1},
+{icon:'⛏️',name:'Pioche',count:1},
+{icon:'🪓',name:'Hache',count:1},
+{icon:'🧪',name:'Potion',count:5},
+{icon:'💎',name:'Émeraude',count:12},
+{icon:'🔷',name:'Saphir',count:8},
+{icon:'🔴',name:'Rubis',count:6},
+{icon:'💜',name:'Améthyste',count:4},
+{icon:'⭐',name:'Topaze',count:3},
+{icon:'🔶',name:'Diamant',count:1},
+{icon:'🪶',name:'Aile-Cape',count:2},
+{icon:'🐉',name:'Écaille',count:24},
+{icon:'🦷',name:'Griffe',count:8},
+{icon:'🪖',name:'Casque',count:1},
+{icon:'🛡️',name:'Plastron',count:1},
+{icon:'👢',name:'Bottes',count:1},
+{icon:'🦵',name:'Jambières',count:1}
+];
+var invGrid=document.getElementById('inv-grid');
+INV_ITEMS.forEach(function(item){
+  var slot=document.createElement('div');
+  slot.className='inv-slot';
+  slot.innerHTML='<div class="icon">'+item.icon+'</div><div class="label">'+item.name+'</div><div class="count">x'+item.count+'</div>';
+  invGrid.appendChild(slot);
+});
+// Fill empty slots
+for(var i=0;i<6;i++){
+  var slot=document.createElement('div');
+  slot.className='inv-slot empty';
+  invGrid.appendChild(slot);
+}
+document.getElementById('inv-close').onclick=function(){document.getElementById('inventory').style.display='none'};
+
+// ============ CONTROLS ============
+loadPct(60,'Configuration...');
+var keys={};
+var pitch=-.25,yaw=0;
+var pointerLocked=false;
+var moveSpd=50, mouseSens=3, settingsOpen=false;
+var touchSpd=40, touchSens=3;
+
+function openSettings(){
+  settingsOpen=true;
+  document.exitPointerLock();
+  document.getElementById('settings').style.display='flex';
+}
+function closeSettings(){
+  settingsOpen=false;
+  document.getElementById('settings').style.display='none';
+}
+
+document.addEventListener('keydown',function(e){
+  keys[e.code]=true;
+  if(e.code==='Escape'){
+    if(settingsOpen)closeSettings();
+    else if(pointerLocked)document.exitPointerLock();
+    else openSettings();
+  }
+  if(['Space','KeyW','KeyA','KeyS','KeyD','ShiftLeft','ShiftRight'].indexOf(e.code)>=0)e.preventDefault();
+});
+document.addEventListener('keyup',function(e){keys[e.code]=false});
+document.addEventListener('mousemove',function(e){
+  if(!pointerLocked)return;
+  yaw-=e.movementX*.001*mouseSens;
+  pitch-=e.movementY*.001*mouseSens;
+  pitch=Math.max(-Math.PI/2+.05,Math.min(Math.PI/2-.05,pitch));
+});
+renderer.domElement.addEventListener('click',function(){
+  if(!pointerLocked&&!settingsOpen){
+    renderer.domElement.requestPointerLock();
+    document.getElementById('tip').style.display='none';
+  }
+});
+document.addEventListener('pointerlockchange',function(){
+  pointerLocked=document.pointerLockElement===renderer.domElement;
+});
+document.addEventListener('keydown',function(e){
+  var n=parseInt(e.key);
+  if(n>=1&&n<=9)switchBiome(n-1);
+  var np={Numpad0:9,Numpad1:10,Numpad2:11,Numpad3:12,Numpad4:13,Numpad5:14,Numpad6:15};
+  if(np[e.code]!==undefined)switchBiome(np[e.code]);
+});
+document.getElementById('sClose').onclick=closeSettings;
+document.getElementById('sSpd').oninput=function(e){moveSpd=+e.target.value;document.getElementById('sSpdV').textContent=moveSpd};
+document.getElementById('sSens').oninput=function(e){mouseSens=+e.target.value;document.getElementById('sSensV').textContent=mouseSens};
+document.getElementById('sTouch').oninput=e=>{touchSpd=+e.target.value;document.getElementById('sTouchV').textContent=touchSpd};
+document.getElementById('sTouchSens').oninput=e=>{touchSens=+e.target.value;document.getElementById('sTouchSensV').textContent=touchSens};
+document.getElementById('sFog').oninput=function(e){var v=+e.target.value;document.getElementById('sFogV').textContent=v;if(scene.fog)scene.fog.density=80/v*.01};
+document.getElementById('sH').oninput=function(e){maxH=+e.target.value;document.getElementById('sHV').textContent=maxH;switchBiome(biomeIndex)};
+
+// ============ TABS ============
+function switchTab(t){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('tab-'+t).classList.add('sel');
+  document.getElementById('tab-game-content').style.display=t==='game'?'block':'none';
+  document.getElementById('tab-audio-content').style.display=t==='audio'?'block':'none';
+  document.getElementById('tab-keys-content').style.display=t==='keys'?'block':'none';
+}
+window.switchTab=switchTab;
+
+// ============ MEDIEVAL AUDIO ENGINE ============
+var audioCtx=null, masterGain=null, musGain=null, sfxGain=null, dlgGain=null, ambGain=null;
+var musicInterval=null, ambInterval=null, stepInterval=null;
+var isPlaying=false;
+
+var MEDIEVAL_NOTES={
+  // Pentatonic minor (medieval vibe)
+  penta:[261.63,293.66,329.63,392.00,440.00,523.25,587.33,659.25],
+  // D Dorian (medieval mode)
+  dorian:[293.66,329.63,349.23,392.00,440.00,493.88,523.25,587.33],
+  // G Mixolydian
+  mixolydian:[392.00,440.00,493.88,523.25,587.33,659.25,698.46,783.99],
+  // A Aeolian (minor)
+  aeolian:[440.00,493.88,523.25,587.33,659.25,698.46,783.99,880.00]
+};
+var CHORD_PROGRESSIONS=[
+  [0,3,4,3], // i-iv-v-iv
+  [0,4,5,3], // i-v-iv-iv
+  [0,2,4,0], // i-iii-v-i
+  [0,4,3,5]  // i-v-iv-vi
+];
+var currentChord=0, currentNote=0, currentProgression=0;
+
+function initAudio(){
+  if(audioCtx)return;
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+  // Compressor for nicer sound
+  var comp=audioCtx.createDynamicsCompressor();
+  comp.threshold.value=-24; comp.knee.value=30; comp.ratio.value=12;
+  comp.attack.value=.003; comp.release.value=.25;
+  comp.connect(audioCtx.destination);
+
+  masterGain=audioCtx.createGain(); masterGain.gain.value=.7;
+  masterGain.connect(comp);
+
+  musGain=audioCtx.createGain(); musGain.gain.value=.5; musGain.connect(masterGain);
+  sfxGain=audioCtx.createGain(); sfxGain.gain.value=.8; sfxGain.connect(masterGain);
+  dlgGain=audioCtx.createGain(); dlgGain.gain.value=.9; dlgGain.connect(masterGain);
+  ambGain=audioCtx.createGain(); ambGain.gain.value=.6; ambGain.connect(masterGain);
+
+  startMedievalMusic();
+  startMedievalAmbience();
+  startFootsteps();
+  isPlaying=true;
+}
+
+function setVolume(type,val){
+  if(!audioCtx)return;
+  var v=val/100;
+  if(type==='master')masterGain.gain.value=v;
+  if(type==='music')musGain.gain.value=v;
+  if(type==='sfx')sfxGain.gain.value=v;
+  if(type==='dialogue')dlgGain.gain.value=v;
+  if(type==='ambience')ambGain.gain.value=v;
+}
+
+// ============ MEDIEVAL MUSIC ============
+function playChordNote(freq,vol,duration,delay){
+  if(!audioCtx||musGain.gain.value<.01)return;
+  var t=audioCtx.currentTime+(delay||0);
+  // Main tone (lute-like)
+  var osc1=audioCtx.createOscillator();
+  osc1.type='triangle'; osc1.frequency.value=freq;
+  var env1=audioCtx.createGain();
+  env1.gain.setValueAtTime(0,t);
+  env1.gain.linearRampToValueAtTime(vol,t+.02);
+  osc1.connect(env1); env1.connect(musGain);
+  osc1.start(t); osc1.stop(t+duration);
+
+  // Harmonic (octave up, softer)
+  var osc2=audioCtx.createOscillator();
+  osc2.type='sine'; osc2.frequency.value=freq*2;
+  var env2=audioCtx.createGain();
+  env2.gain.setValueAtTime(0,t);
+  env2.gain.linearRampToValueAtTime(vol*.3,t+.01);
+  osc2.connect(env2); env2.connect(musGain);
+  osc2.start(t); osc2.stop(t+duration*.7);
+
+  // Dissonant overtone (gives medieval feel)
+  var osc3=audioCtx.createOscillator();
+  osc3.type='sine'; osc3.frequency.value=freq*1.5;
+  var env3=audioCtx.createGain();
+  env3.gain.setValueAtTime(0,t);
+  env3.gain.linearRampToValueAtTime(vol*.15,t+.03);
+  osc3.connect(env3); env3.connect(musGain);
+  osc3.start(t); osc3.stop(t+duration*.5);
+}
+
+function playMelodyNote(freq,vol,duration,delay){
+  if(!audioCtx||musGain.gain.value<.01)return;
+  var t=audioCtx.currentTime+(delay||0);
+  // Flute-like
+  var osc=audioCtx.createOscillator();
+  osc.type='sine'; osc.frequency.value=freq;
+  // Vibrato for medieval feel
+  var vibrato=audioCtx.createOscillator();
+  var vibGain=audioCtx.createGain();
+  vibrato.frequency.value=5; vibGain.gain.value=3;
+  vibrato.connect(vibGain); vibGain.connect(osc.frequency);
+  var env=audioCtx.createGain();
+  env.gain.setValueAtTime(0,t);
+  env.gain.linearRampToValueAtTime(vol,t+.05);
+  env.gain.setValueAtTime(vol,t+duration-.1);
+  env.gain.linearRampToValueAtTime(0,t+duration);
+  osc.connect(env); env.connect(musGain);
+  vibrato.start(t); osc.start(t);
+  osc.stop(t+duration); vibrato.stop(t+duration);
+}
+
+function playDrumHit(vol,delay){
+  if(!audioCtx||musGain.gain.value<.01)return;
+  var t=audioCtx.currentTime+(delay||0);
+  var buf=audioCtx.createBuffer(1,audioCtx.sampleRate*.15,audioCtx.sampleRate);
+  var d=buf.getChannelData(0);
+  for(var i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(audioCtx.sampleRate*.02));
+  var src=audioCtx.createBufferSource(); src.buffer=buf;
+  var filter=audioCtx.createBiquadFilter();
+  filter.type='bandpass'; filter.frequency.value=200; filter.Q.value=.5;
+  var env=audioCtx.createGain();
+  env.gain.setValueAtTime(vol,t);
+  env.gain.exponentialRampToValueAtTime(.001,t+.15);
+  src.connect(filter); filter.connect(env); env.connect(musGain);
+  src.start(t);
+}
+
+function startMedievalMusic(){
+  if(!audioCtx)return;
+  var tempo=120; // BPM
+  var beatLen=60/tempo;
+  var barLen=beatLen*4;
+  currentProgression=Math.floor(Math.random()*CHORD_PROGRESSIONS.length);
+  var prog=CHORD_PROGRESSIONS[currentProgression];
+  currentChord=0; currentNote=0;
+  var notePatterns=[
+    [0,.5,1,1.5,2,3],
+    [0,1,2,2.5,3,3.5],
+    [0,.5,1.5,2,3,3.5],
+    [0,1,1.5,2.5,3]
+  ];
+  var melodyNoteIdx=0;
+
+  musicInterval=setInterval(function(){
+    if(!audioCtx||musGain.gain.value<.01)return;
+    var scale=MEDIEVAL_NOTES.dorian;
+    var chord=prog[currentChord%prog.length];
+    var root=scale[chord%scale.length];
+    var third=scale[(chord+2)%scale.length];
+    var fifth=scale[(chord+4)%scale.length];
+    var dur=barLen*1.8;
+    // Play chord (arpeggiated lute style)
+    playChordNote(root,.4,dur*.8,0);
+    playChordNote(third,.3,dur*.7,beatLen*.5);
+    playChordNote(root,.35,dur*.6,beatLen);
+    playChordNote(fifth,.25,dur*.6,beatLen*1.5);
+    playChordNote(root,.3,dur*.5,beatLen*2);
+    playChordNote(third,.25,dur*.4,beatLen*2.5);
+    playChordNote(root,.35,dur*.8,beatLen*3);
+    // Melody (flute-like)
+    var pat=notePatterns[melodyNoteIdx%notePatterns.length];
+    melodyNoteIdx++;
+    pat.forEach(function(bn){
+      var idx=Math.floor(Math.random()*scale.length);
+      var n=scale[idx]*2; // octave up
+      playMelodyNote(n,.12,beatLen*.6,bn*beatLen);
+    });
+    // Drum
+    playDrumHit(.08,0);
+    playDrumHit(.05,beatLen*2);
+    // Advance
+    currentChord++;
+    if(currentChord>=prog.length){
+      currentChord=0;
+      currentProgression=Math.floor(Math.random()*CHORD_PROGRESSIONS.length);
+      prog=CHORD_PROGRESSIONS[currentProgression];
+      // Switch scale occasionally
+      var scales=['dorian','penta','mixolydian','aeolian'];
+      var newScale=scales[Math.floor(Math.random()*scales.length)];
+      scale=MEDIEVAL_NOTES[newScale];
+    }
+  },barLen*4*1000);
+}
+
+// ============ MEDIEVAL AMBIENCE ============
+function startMedievalAmbience(){
+  if(!audioCtx)return;
+  // Wind
+  function playWind(){
+    if(!audioCtx||ambGain.gain.value<.01)return;
+    var t=audioCtx.currentTime;
+    var buf=audioCtx.createBuffer(1,audioCtx.sampleRate*3,audioCtx.sampleRate);
+    var d=buf.getChannelData(0);
+    for(var i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*.2;
+    var src=audioCtx.createBufferSource(); src.buffer=buf;
+    var f=audioCtx.createBiquadFilter();
+    f.type='lowpass'; f.frequency.value=300+Math.random()*300;
+    var env=audioCtx.createGain();
+    env.gain.setValueAtTime(0,t);
+    env.gain.linearRampToValueAtTime(.06,t+1);
+    env.gain.linearRampToValueAtTime(0,t+3);
+    src.connect(f); f.connect(env); env.connect(ambGain);
+    src.start(t); src.stop(t+3);
+  }
+  // Bird-like chirps
+  function playBird(){
+    if(!audioCtx||ambGain.gain.value<.01)return;
+    var t=audioCtx.currentTime;
+    for(var i=0;i<3;i++){
+      var osc=audioCtx.createOscillator();
+      var env=audioCtx.createGain();
+      var base=2000+Math.random()*1500;
+      osc.type='sine';
+      osc.frequency.setValueAtTime(base,t+i*.3);
+      osc.frequency.linearRampToValueAtTime(base*.7,t+i*.3+.1);
+      env.gain.setValueAtTime(0,t+i*.3);
+      env.gain.linearRampToValueAtTime(.03,t+i*.3+.02);
+      env.gain.exponentialRampToValueAtTime(.001,t+i*.3+.15);
+      osc.connect(env); env.connect(ambGain);
+      osc.start(t+i*.3); osc.stop(t+i*.3+.15);
+    }
+  }
+  ambInterval=setInterval(function(){
+    playWind();
+    if(Math.random()<.3)playBird();
+  },3000);
+  playWind();
+}
+
+// ============ FOOTSTEPS ============
+function playFootstep(){
+  if(!audioCtx||sfxGain.gain.value<.01)return;
+  var t=audioCtx.currentTime;
+  var buf=audioCtx.createBuffer(1,audioCtx.sampleRate*.12,audioCtx.sampleRate);
+  var d=buf.getChannelData(0);
+  for(var i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(audioCtx.sampleRate*.015));
+  var src=audioCtx.createBufferSource(); src.buffer=buf;
+  var f=audioCtx.createBiquadFilter();
+  f.type='lowpass'; f.frequency.value=600+Math.random()*400;
+  var env=audioCtx.createGain();
+  env.gain.setValueAtTime(.15*Math.random()*.5+.08,t);
+  env.gain.exponentialRampToValueAtTime(.001,t+.12);
+  src.connect(f); f.connect(env); env.connect(sfxGain);
+  src.start(t);
+}
+
+function startFootsteps(){
+  stepInterval=setInterval(function(){
+    // Only play footsteps when moving (check keys or touch)
+    var moving=false;
+    if(keys['KeyW']||keys['KeyA']||keys['KeyS']||keys['KeyD'])moving=true;
+    if(isTouch){
+      if(Math.abs(moveJoy.getDX())>.05||Math.abs(moveJoy.getDY())>.05)moving=true;
+    }
+    if(moving)playFootstep();
+  },400);
+}
+
+// ============ SFX ============
+function playSFX(type){
+  if(!audioCtx)initAudio();
+  if(!audioCtx)return;
+  var t=audioCtx.currentTime;
+  if(type==='jump'){
+    var osc=audioCtx.createOscillator(), env=audioCtx.createGain();
+    osc.type='sine'; osc.frequency.setValueAtTime(200,t);
+    osc.frequency.linearRampToValueAtTime(600,t+.15);
+    env.gain.setValueAtTime(.15,t);
+    env.gain.exponentialRampToValueAtTime(.001,t+.2);
+    osc.connect(env); env.connect(sfxGain);
+    osc.start(); osc.stop(t+.2);
+  } else if(type==='swing'){
+    var buf=audioCtx.createBuffer(1,audioCtx.sampleRate*.3,audioCtx.sampleRate);
+    var d=buf.getChannelData(0);
+    for(var i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.exp(-i/(audioCtx.sampleRate*.08));
+    var src=audioCtx.createBufferSource(); src.buffer=buf;
+    var f=audioCtx.createBiquadFilter(); f.type='highpass'; f.frequency.value=800;
+    var env=audioCtx.createGain();
+    env.gain.setValueAtTime(.2,t);
+    env.gain.exponentialRampToValueAtTime(.001,t+.3);
+    src.connect(f); f.connect(env); env.connect(sfxGain);
+    src.start(t);
+  } else if(type==='coin'){
+    var osc=audioCtx.createOscillator(), env=audioCtx.createGain();
+    osc.type='sine'; osc.frequency.value=1200;
+    env.gain.setValueAtTime(.1,t);
+    env.gain.exponentialRampToValueAtTime(.001,t+.15);
+    osc.connect(env); env.connect(sfxGain);
+    osc.start(); osc.stop(t+.15);
+    // Second harmonic
+    setTimeout(function(){
+      var osc2=audioCtx.createOscillator(), env2=audioCtx.createGain();
+      osc2.type='sine'; osc2.frequency.value=1800;
+      env2.gain.setValueAtTime(.08,audioCtx.currentTime);
+      env2.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+.1);
+      osc2.connect(env2); env2.connect(sfxGain);
+      osc2.start(); osc2.stop(audioCtx.currentTime+.1);
+    },80);
+  }
+}
+
+// ============ DIALOGUE ============
+function playDialogue(text){
+  if(!audioCtx)initAudio();
+  if(!audioCtx)return;
+  var words=text.split(' ');
+  var t=audioCtx.currentTime;
+  var elapsed=0;
+  words.forEach(function(w){
+    var dur=.08+w.length*.02;
+    var osc=audioCtx.createOscillator(), env=audioCtx.createGain();
+    osc.type='sawtooth';
+    var base=100+Math.random()*100;
+    osc.frequency.setValueAtTime(base,t+elapsed);
+    osc.frequency.linearRampToValueAtTime(base*(.7+Math.random()*.6),t+elapsed+dur);
+    env.gain.setValueAtTime(0,t+elapsed);
+    env.gain.linearRampToValueAtTime(.05,t+elapsed+.01);
+    env.gain.exponentialRampToValueAtTime(.001,t+elapsed+dur);
+    osc.connect(env); env.connect(dlgGain);
+    osc.start(t+elapsed); osc.stop(t+elapsed+dur);
+    elapsed+=dur+0.03;
+  });
+}
+
+// ============ SLIDERS ============
+document.getElementById('sVol').oninput=function(e){setVolume('master',+e.target.value);document.getElementById('sVolV').textContent=e.target.value+'%'};
+document.getElementById('sMus').oninput=function(e){setVolume('music',+e.target.value);document.getElementById('sMusV').textContent=e.target.value+'%'};
+document.getElementById('sSfx').oninput=function(e){setVolume('sfx',+e.target.value);document.getElementById('sSfxV').textContent=e.target.value+'%'};
+document.getElementById('sDlg').oninput=function(e){setVolume('dialogue',+e.target.value);document.getElementById('sDlgV').textContent=e.target.value+'%'};
+document.getElementById('sAmb').oninput=function(e){setVolume('ambience',+e.target.value);document.getElementById('sAmbV').textContent=e.target.value+'%'};
+
+document.getElementById('btn-test-sfx').onclick=function(){initAudio();playSFX('swing');document.getElementById('audio-status').textContent='🔊 SFX joué'};
+document.getElementById('btn-test-mus').onclick=function(){initAudio();document.getElementById('audio-status').textContent='🎵 Musique médiévale en cours...'};
+document.getElementById('btn-test-dlg').onclick=function(){initAudio();playDialogue('Bienvenue dans le Royaume des Legendes brave aventurier');document.getElementById('audio-status').textContent='💬 Dialogue joué'};
+
+document.addEventListener('click',function(){if(!audioCtx)initAudio()},{once:true});
+document.addEventListener('touchstart',function(){if(!audioCtx)initAudio()},{once:true});
+
+window.addEventListener('resize',function(){
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+// ============ TOUCH CONTROLS ============
+var isTouch=('ontouchstart' in window||navigator.maxTouchPoints>0);
+if(isTouch) document.getElementById('touch-ctrl').style.display='block';
+
+function setupJoy(elId,knobClass){
+  var base=document.getElementById(elId);
+  var knob=base.querySelector('.joy-knob');
+  var id=null, cX=0, cY=0, dx=0, dy=0;
+  function getCenter(){
+    var r=base.getBoundingClientRect();
+    return {x:r.left+r.width/2,y:r.top+r.height/2};
+  }
+  base.addEventListener('touchstart',function(e){
+    e.preventDefault();
+    id=e.changedTouches[0].identifier;
+    var c=getCenter();cX=c.x;cY=c.y;
+    updateKnob(e.changedTouches[0]);
+  },{passive:false});
+  base.addEventListener('touchmove',function(e){
+    e.preventDefault();
+    for(var i=0;i<e.changedTouches.length;i++){
+      if(e.changedTouches[i].identifier===id){updateKnob(e.changedTouches[i]);break;}
+    }
+  },{passive:false});
+  function endTouch(e){
+    for(var i=0;i<e.changedTouches.length;i++){
+      if(e.changedTouches[i].identifier===id){
+        id=null;dx=0;dy=0;
+        knob.style.transform='translate(-50%,-50%)';
+        break;
+      }
+    }
+  }
+  base.addEventListener('touchend',endTouch);
+  base.addEventListener('touchcancel',endTouch);
+  function updateKnob(t){
+    var ddx=t.clientX-cX, ddy=t.clientY-cY;
+    var dist=Math.sqrt(ddx*ddx+ddy*ddy);
+    var maxR=30;
+    if(dist>maxR){ddx=ddx/dist*maxR;ddy=ddy/dist*maxR;}
+    dx=ddx/maxR;dy=ddy/maxR;
+    knob.style.transform='translate(calc(-50% + '+ddx+'px),calc(-50% + '+ddy+'px))';
+  }
+  return {getDX:function(){return dx},getDY:function(){return dy}};
+}
+var moveJoy=setupJoy('joy-move');
+var lookJoy=setupJoy('joy-look');
+
+// Touch buttons
+function touchBtn(btnId,code){
+  var btn=document.getElementById(btnId);
+  btn.addEventListener('touchstart',function(e){
+    e.preventDefault();keys[code]=true;btn.classList.add('touching');
+  },{passive:false});
+  btn.addEventListener('touchend',function(e){
+    e.preventDefault();keys[code]=false;btn.classList.remove('touching');
+  },{passive:false});
+  btn.addEventListener('touchcancel',function(){keys[code]=false;btn.classList.remove('touching')});
+}
+touchBtn('btn-up','Space');
+touchBtn('btn-down','ShiftLeft');
+
+// ============ LOOP ============
+loadPct(100,'Prêt !');
+updateGridChunks(0,0);
+setTimeout(function(){
+  LD.classList.add('done');
+  setTimeout(function(){LD.style.display='none'},600);
+  document.getElementById('hud').style.display='block';
+  document.getElementById('biome-tag').style.display='block';
+  document.getElementById('crosshair').style.display='block';
+  document.getElementById('tip').style.display='block';
+  menu.style.display='flex';
+},400);
+
+var clock=new THREE.Clock();
+(function loop(){
+  requestAnimationFrame(loop);
+  var dt=Math.min(clock.getDelta(),.1);
+  var spd=moveSpd*dt;
+  var fwd=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw));
+  var right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw));
+
+  // Keyboard
+  if(keys['KeyW'])camera.position.addScaledVector(fwd,spd);
+  if(keys['KeyS'])camera.position.addScaledVector(fwd,-spd*.7);
+  if(keys['KeyA'])camera.position.addScaledVector(right,-spd);
+  if(keys['KeyD'])camera.position.addScaledVector(right,spd);
+  if(keys['Space'])camera.position.y+=spd;
+  if(keys['ShiftLeft']||keys['ShiftRight'])camera.position.y-=spd;
+
+  // Touch: move joystick
+  if(isTouch){
+    var ts=touchSpd/50;
+    var mdx=moveJoy.getDX(), mdy=moveJoy.getDY();
+    if(Math.abs(mdx)>.05||Math.abs(mdy)>.05){
+      camera.position.addScaledVector(fwd,-mdy*spd*ts);
+      camera.position.addScaledVector(right,mdx*spd*ts);
+    }
+    // Touch: look joystick
+    var ldx=lookJoy.getDX(), ldy=lookJoy.getDY();
+    if(Math.abs(ldx)>.05||Math.abs(ldy)>.05){
+      yaw-=ldx*.04*(touchSens/3);
+      pitch-=ldy*.04*(touchSens/3);
+      pitch=Math.max(-Math.PI/2+.05,Math.min(Math.PI/2-.05,pitch));
+    }
+  }
+
+  camera.rotation.order='YXZ';
+  camera.rotation.y=yaw;
+  camera.rotation.x=pitch;
+  var p=camera.position;
+  document.getElementById('coords').textContent='X:'+Math.round(p.x)+' Y:'+Math.round(p.y)+' Z:'+Math.round(p.z);
+  // Update grid chunks around player
+  updateGridChunks(p.x,p.z);
+  renderer.render(scene,camera);
+})();
+</script>
+</body>
+</html>
