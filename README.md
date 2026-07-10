@@ -52,3 +52,8 @@ Avec **320+ personnages** issus de films, dessins animés et manga.
 
 ---
 *Par Seb Dardeau — 2026*
+
+
+## 🎵 Moteur audio (à intégrer)
+
+`archives/version-audio-2026-06-05.html` (issu de `sebdrd1.github.io`) contient un moteur audio procédural médiéval : accords de luth, mélodie de flûte, percussions, ambiance de vent, et sliders de volume. Cette version est antérieure aux correctifs joysticks du 2026-06-09 — ne fusionner QUE la partie audio dans `index.html`.
